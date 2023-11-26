@@ -23,33 +23,34 @@ pub fn main() !void {
     const file = try std.fs.cwd().openFile(file_path, .{});
     defer file.close();
 
-    const code = try readToLFAlloc(allocator, file.reader());
-    defer code.deinit();
+    const code = try readToEndAlloc(allocator, file.reader());
 
     try stderr.print("Code:\n\"{s}\"\n", .{code.items});
 
     const program = try parseCode(allocator, std.mem.trim(u8, code.items, " \r\n\t"));
-    defer program.deinit();
+    code.deinit();
 
     const stdin = std.io.getStdIn().reader();
     const stdout = std.io.getStdOut().writer();
 
+    var result = ArrayList(u8).init(allocator);
+    try runProgram(program.items, stdin, result.writer());
     try stderr.print("Result:\n\"", .{});
-    try runProgram(@TypeOf(stdin), @TypeOf(stdout), program.items, stdin, stdout);
+    try stdout.print("{s}", .{result.items});
     try stderr.print("\"\n", .{});
 }
 
-fn readToLFAlloc(allocator: Allocator, reader: anytype) !ArrayList(u8) {
+fn readToEndAlloc(allocator: Allocator, reader: anytype) !ArrayList(u8) {
     var contents = ArrayList(u8).init(allocator);
     errdefer contents.deinit();
-    reader.streamUntilDelimiter(contents.writer(), '\n', null) catch |err| switch (err) {
+    reader.streamUntilDelimiter(contents.writer(), '\x00', null) catch |err| switch (err) {
         error.EndOfStream => {},
         else => return err,
     };
     return contents;
 }
 
-fn runProgram(comptime Reader: type, comptime Writer: type, program: []const Instruction, maybe_reader: ?Reader, maybe_writer: ?Writer) !void {
+fn runProgram(program: []const Instruction, reader: anytype, writer: anytype) !void {
     var memory = [_]u8{0} ** RAM;
     var ptr: usize = 0;
     var cursor: usize = 0;
@@ -59,7 +60,7 @@ fn runProgram(comptime Reader: type, comptime Writer: type, program: []const Ins
     while (cursor < program.len) : (cursor += 1) {
         const instruction = program[cursor];
         switch (instruction) {
-            Instruction.next => if (ptr > RAM - 1) {
+            Instruction.next => if (ptr == RAM - 1) {
                 ptr = 0;
             } else {
                 ptr += 1;
@@ -71,12 +72,12 @@ fn runProgram(comptime Reader: type, comptime Writer: type, program: []const Ins
             },
             Instruction.plus_one => memory[ptr] = @addWithOverflow(memory[ptr], 1)[0],
             Instruction.minus_one => memory[ptr] = @subWithOverflow(memory[ptr], 1)[0],
-            Instruction.output => if (maybe_writer) |writer| {
+            Instruction.output => if (@TypeOf(writer) != @TypeOf(null)) {
                 try writer.writeByte(memory[ptr]);
             } else {
                 return error.NoWriter;
             },
-            Instruction.input => if (maybe_reader) |reader| {
+            Instruction.input => if (@TypeOf(reader) != @TypeOf(null)) {
                 memory[ptr] = try reader.readByte();
             } else {
                 return error.NoReader;
@@ -149,11 +150,6 @@ test "hello world" {
     defer program.deinit();
     var output = ArrayList(u8).init(std.testing.allocator);
     defer output.deinit();
-    try runProgram(@TypeOf(struct {
-        fn readByte(self: @This()) !u8 {
-            _ = self;
-            return error.NotImplemented;
-        }
-    }), @TypeOf(output.writer()), program.items, null, output.writer());
+    try runProgram(program.items, null, output.writer());
     try std.testing.expectEqualSlices(u8, "Hello World!", output.items);
 }
