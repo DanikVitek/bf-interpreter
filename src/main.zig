@@ -29,13 +29,13 @@ pub fn main() !void {
     try stderr.print("Code:\n\"{s}\"\n", .{code.items});
 
     const program = try parseCode(allocator, std.mem.trim(u8, code.items, " \r\n\t"));
-    defer allocator.free(program);
+    defer program.deinit();
 
     const stdin = std.io.getStdIn().reader();
     const stdout = std.io.getStdOut().writer();
 
     try stderr.print("Result:\n\"", .{});
-    try runProgram(@TypeOf(stdin), @TypeOf(stdout), program, stdin, stdout);
+    try runProgram(@TypeOf(stdin), @TypeOf(stdout), program.items, stdin, stdout);
     try stderr.print("\"\n", .{});
 }
 
@@ -91,20 +91,20 @@ fn runProgram(comptime Reader: type, comptime Writer: type, program: []const Ins
     }
 }
 
-fn parseCode(allocator: Allocator, code: []const u8) ![]const Instruction {
-    var program = try allocator.alloc(Instruction, code.len);
-    errdefer allocator.free(program);
+fn parseCode(allocator: Allocator, code: []const u8) !ArrayList(Instruction) {
+    var program = ArrayList(Instruction).init(allocator);
+    errdefer program.deinit();
     var loop_start_stack = ArrayList(usize).init(allocator);
     defer loop_start_stack.deinit();
     for (code, 0..) |c, i| {
         switch (c) {
-            '>' => program[i] = Instruction.next,
-            '<' => program[i] = Instruction.previous,
-            '+' => program[i] = Instruction.plus_one,
-            '-' => program[i] = Instruction.minus_one,
-            '.' => program[i] = Instruction.output,
-            ',' => program[i] = Instruction.input,
-            '[' => program[i] = .{ .loop_forwards = blk: {
+            '>' => try program.append(Instruction.next),
+            '<' => try program.append(Instruction.previous),
+            '+' => try program.append(Instruction.plus_one),
+            '-' => try program.append(Instruction.minus_one),
+            '.' => try program.append(Instruction.output),
+            ',' => try program.append(Instruction.input),
+            '[' => try program.append(.{ .loop_forwards = blk: {
                 for (i + 1..code.len) |j| {
                     if (code[j] == ']') {
                         try loop_start_stack.append(i);
@@ -112,9 +112,9 @@ fn parseCode(allocator: Allocator, code: []const u8) ![]const Instruction {
                     }
                 }
                 return error.InvalidLoop;
-            } },
-            ']' => program[i] = .{ .loop_backwards = loop_start_stack.popOrNull() orelse return error.InvalidLoop },
-            else => return error.InvalidSymbol,
+            } }),
+            ']' => try program.append(.{ .loop_backwards = loop_start_stack.popOrNull() orelse return error.InvalidLoop }),
+            else => {},
         }
     }
     return program;
@@ -133,7 +133,7 @@ const Instruction = union(enum) {
 
 test "hello world" {
     var code = blk: {
-        const path = "./examples/hello_world.bf";
+        const path = "./examples/hello_world.b";
         const file = try std.fs.cwd().openFile(path, .{});
         defer file.close();
         var data = ArrayList(u8).init(std.testing.allocator);
@@ -146,7 +146,7 @@ test "hello world" {
     };
     defer code.deinit();
     const program = try parseCode(std.testing.allocator, std.mem.trim(u8, code.items, " \r\n\t"));
-    defer std.testing.allocator.free(program);
+    defer program.deinit();
     var output = ArrayList(u8).init(std.testing.allocator);
     defer output.deinit();
     try runProgram(@TypeOf(struct {
@@ -154,6 +154,6 @@ test "hello world" {
             _ = self;
             return error.NotImplemented;
         }
-    }), @TypeOf(output.writer()), program, null, output.writer());
+    }), @TypeOf(output.writer()), program.items, null, output.writer());
     try std.testing.expectEqualSlices(u8, "Hello World!", output.items);
 }
