@@ -4,6 +4,8 @@ const ArrayList = std.ArrayList;
 const HashMap = std.HashMap;
 const Type = std.builtin.Type;
 
+const RAM = 30_000;
+
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
@@ -48,12 +50,12 @@ fn readToLFAlloc(allocator: Allocator, reader: anytype) !ArrayList(u8) {
 }
 
 fn runProgram(comptime Reader: type, comptime Writer: type, program: []const Instruction, maybe_reader: ?Reader, maybe_writer: ?Writer) !void {
-    const RAM = 30_000;
     var memory = [_]u8{0} ** RAM;
     var ptr: usize = 0;
-    errdefer std.debug.print("ptr: {d}", .{ptr});
-
     var cursor: usize = 0;
+
+    errdefer std.debug.print("ptr: {d};\ncursor: {d};\nmemory: {any}\n", .{ ptr, cursor, memory });
+
     while (cursor < program.len) : (cursor += 1) {
         const instruction = program[cursor];
         switch (instruction) {
@@ -164,8 +166,9 @@ test "hello world" {
     var output = ArrayList(u8).init(std.testing.allocator);
     defer output.deinit();
     try runProgram(@TypeOf(struct {
-        fn readByte(self: @This()) u8 {
+        fn readByte(self: @This()) !u8 {
             _ = self;
+            return error.NotImplemented;
         }
     }), @TypeOf(output.writer()), program, null, output.writer());
     try std.testing.expectEqualSlices(u8, "Hello World!", output.items);
