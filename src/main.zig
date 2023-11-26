@@ -98,12 +98,12 @@ fn parseCode(allocator: Allocator, code: []const u8) ![]const Instruction {
     defer loop_start_stack.deinit();
     for (code, 0..) |c, i| {
         switch (c) {
-            '>' => program[i] = InstructionTag.next,
-            '<' => program[i] = InstructionTag.previous,
-            '+' => program[i] = InstructionTag.plus_one,
-            '-' => program[i] = InstructionTag.minus_one,
-            '.' => program[i] = InstructionTag.output,
-            ',' => program[i] = InstructionTag.input,
+            '>' => program[i] = Instruction.next,
+            '<' => program[i] = Instruction.previous,
+            '+' => program[i] = Instruction.plus_one,
+            '-' => program[i] = Instruction.minus_one,
+            '.' => program[i] = Instruction.output,
+            ',' => program[i] = Instruction.input,
             '[' => program[i] = .{ .loop_forwards = blk: {
                 for (i + 1..code.len) |j| {
                     if (code[j] == ']') {
