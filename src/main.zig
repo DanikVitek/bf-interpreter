@@ -40,13 +40,13 @@ pub fn main() !void {
 }
 
 fn readToLFAlloc(allocator: Allocator, reader: anytype) !ArrayList(u8) {
-    var code = ArrayList(u8).init(allocator);
-    errdefer code.deinit();
-    reader.streamUntilDelimiter(code.writer(), '\n', null) catch |err| switch (err) {
+    var contents = ArrayList(u8).init(allocator);
+    errdefer contents.deinit();
+    reader.streamUntilDelimiter(contents.writer(), '\n', null) catch |err| switch (err) {
         error.EndOfStream => {},
         else => return err,
     };
-    return code;
+    return contents;
 }
 
 fn runProgram(comptime Reader: type, comptime Writer: type, program: []const Instruction, maybe_reader: ?Reader, maybe_writer: ?Writer) !void {
