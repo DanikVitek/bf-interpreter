@@ -94,6 +94,8 @@ fn runProgram(comptime Reader: type, comptime Writer: type, program: []const Ins
 fn parseCode(allocator: Allocator, code: []const u8) ![]const Instruction {
     var program = try allocator.alloc(Instruction, code.len);
     errdefer allocator.free(program);
+    var loop_start_stack = ArrayList(usize).init(allocator);
+    defer loop_start_stack.deinit();
     for (code, 0..) |c, i| {
         switch (c) {
             '>' => program[i] = InstructionTag.next,
@@ -105,20 +107,13 @@ fn parseCode(allocator: Allocator, code: []const u8) ![]const Instruction {
             '[' => program[i] = .{ .loop_forwards = blk: {
                 for (i + 1..code.len) |j| {
                     if (code[j] == ']') {
+                        try loop_start_stack.append(i);
                         break :blk j;
                     }
                 }
                 return error.InvalidLoop;
             } },
-            ']' => program[i] = .{ .loop_backwards = blk: {
-                var j = i - 1;
-                while (j > 0) : (j -= 1) {
-                    if (code[j] == '[') {
-                        break :blk j;
-                    }
-                }
-                return error.InvalidLoop;
-            } },
+            ']' => program[i] = .{ .loop_backwards = loop_start_stack.popOrNull() orelse return error.InvalidLoop },
             else => return error.InvalidSymbol,
         }
     }
