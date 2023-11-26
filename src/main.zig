@@ -120,18 +120,7 @@ fn parseCode(allocator: Allocator, code: []const u8) ![]const Instruction {
     return program;
 }
 
-const InstructionTag = enum {
-    next,
-    previous,
-    plus_one,
-    minus_one,
-    output,
-    input,
-    loop_forwards,
-    loop_backwards,
-};
-
-const Instruction = union(InstructionTag) {
+const Instruction = union(enum) {
     next,
     previous,
     plus_one,
